@@ -16,7 +16,7 @@ build/
 # not the PyInstaller build intermediates.
 dist/*
 !dist/VibeCodingVirMic-Installer-*.pkg
-!dist/dist.md
+!dist/README.md
 
 # local tooling / macOS / regenerable build intermediates
 .claude/

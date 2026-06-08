@@ -22,11 +22,12 @@ from Foundation import NSMakeRect, NSObject, NSOperationQueue, NSTimer
 
 import tuning
 
-# NSWindowStyleMask / backing / bezel / progress-style constants.
-_TITLED, _CLOSABLE, _RESIZABLE = 1 << 0, 1 << 1, 1 << 3
+# NSWindowStyleMask / backing / bezel / progress-style / autoresize constants.
+_TITLED, _CLOSABLE, _MINIATURIZABLE, _RESIZABLE = 1 << 0, 1 << 1, 1 << 2, 1 << 3
 _BACKING_BUFFERED = 2
 _BEZEL_ROUNDED = 1
 _PROGRESS_BAR = 0  # NSProgressIndicatorStyleBar
+_VIEW_WIDTH_SIZABLE, _VIEW_HEIGHT_SIZABLE = 1 << 1, 1 << 4  # NSViewWidth/HeightSizable
 W = 600  # window/content width
 
 
@@ -92,24 +93,37 @@ class SettingsController(NSObject):
         if self._window is None:
             self._build()
         from AppKit import NSApp
+        # Switch from accessory (menu-bar-only) to regular so the OS gives the
+        # window full management — edge-drag resize/move. Reverted on close.
+        NSApp.setActivationPolicy_(0)  # NSApplicationActivationPolicyRegular
         NSApp.activateIgnoringOtherApps_(True)
         self._window.makeKeyAndOrderFront_(None)
+
+    # NSWindow delegate — fires when the user closes the Settings window.
+    def windowWillClose_(self, notification):
+        from AppKit import NSApp
+        NSApp.setActivationPolicy_(1)  # back to accessory (menu-bar only)
+        self._stop_playback()
 
     @objc.python_method
     def _build(self):
         h = 620
+        mask = _TITLED | _CLOSABLE | _MINIATURIZABLE | _RESIZABLE
         win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(0, 0, W, h),
-            _TITLED | _CLOSABLE | _RESIZABLE, _BACKING_BUFFERED, False,
+            NSMakeRect(0, 0, W, h), mask, _BACKING_BUFFERED, False,
         )
+        win.setStyleMask_(mask)            # belt-and-suspenders: ensure resizable
+        win.setMinSize_((460, 380))        # give resize a clear lower bound
         win.setTitle_("VibeCodingVirMic 设置 / Settings")
         win.setReleasedWhenClosed_(False)  # we keep the controller; just hide
+        win.setDelegate_(self)             # for windowWillClose_ (revert policy)
         win.center()
 
         scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, W, h))
         scroll.setHasVerticalScroller_(True)
         scroll.setAutohidesScrollers_(True)
         scroll.setDrawsBackground_(False)
+        scroll.setAutoresizingMask_(_VIEW_WIDTH_SIZABLE | _VIEW_HEIGHT_SIZABLE)
         doc = _Flipped.alloc().initWithFrame_(NSMakeRect(0, 0, W, h))
         scroll.setDocumentView_(doc)
         win.setContentView_(scroll)

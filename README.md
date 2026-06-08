@@ -19,7 +19,7 @@
 
 ### 第 1 步 · 安装
 
-需要一台 **Apple Silicon** 的 Mac。拿到 `VibeCodingVirMic-Installer-1.0.0.pkg`,双击打开。因为暂未做 Apple 公证,Gatekeeper 首次会拦 —— **右键 .pkg → 打开** 即可(或在终端跑 `sudo installer -pkg VibeCodingVirMic-Installer-1.0.0.pkg -target /`)。安装过程要输入一次管理员密码(macOS 安装音频驱动时必需)。安装器会一并装好 App、全部依赖,以及 BlackHole 2ch 虚拟声卡。
+需要一台 **Apple Silicon** 的 Mac。安装包就在本仓库的 **[`./dist/`](./dist/)** 目录(各版本下载与更新记录见 [`dist/README.md`](./dist/README.md))。拿到 `VibeCodingVirMic-Installer-1.0.0.pkg`,双击打开。因为暂未做 Apple 公证,Gatekeeper 首次会拦 —— **右键 .pkg → 打开** 即可(或在终端跑 `sudo installer -pkg VibeCodingVirMic-Installer-1.0.0.pkg -target /`)。安装过程要输入一次管理员密码(macOS 安装音频驱动时必需)。安装器会一并装好 App、全部依赖,以及 BlackHole 2ch 虚拟声卡。
 
 ### 第 2 步 · 打开 App 并启动
 

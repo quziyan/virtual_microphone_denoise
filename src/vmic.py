@@ -39,8 +39,8 @@ def main() -> None:
     parser.add_argument("--output-device", default=None,
                         help="Output device (default: first 'BlackHole')")
     parser.add_argument("--samplerate", type=int, default=48000)
-    parser.add_argument("--atten-lim-db", type=float, default=100.0,
-                        help="Max attenuation in dB (100 = aggressive default)")
+    parser.add_argument("--atten-lim-db", type=float, default=20.0,
+                        help="Max attenuation in dB (default 20 = gentle)")
     parser.add_argument("--passthrough", action="store_true",
                         help="Bypass Hush; route mic straight through (A/B test)")
     parser.add_argument("--list-devices", action="store_true")
@@ -56,7 +56,7 @@ def main() -> None:
             input_match=args.input_device,
             output_match=args.output_device,
             samplerate=args.samplerate,
-            mode="off" if args.passthrough else "aggressive",
+            mode="off" if args.passthrough else "gentle",
             atten_override=None if args.passthrough else args.atten_lim_db,
         )
     except OSError as exc:

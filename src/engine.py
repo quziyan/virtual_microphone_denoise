@@ -117,7 +117,7 @@ class VMicEngine:
         input_match=None,
         output_match=None,
         samplerate: int = DEFAULT_SAMPLERATE,
-        mode: str = "aggressive",
+        mode: str = "gentle",   # default 20 dB
         atten_override: float | None = None,
         jitter_frames: int = 4,
     ) -> None:

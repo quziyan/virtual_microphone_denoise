@@ -82,7 +82,7 @@ class HushMicApp(rumps.App):
 
         cfg = load_config()
         self._input_name: str | None = cfg.get("input")  # chosen mic name, or None
-        self._start_mode = cfg.get("mode", "aggressive")
+        self._start_mode = cfg.get("mode", "gentle")  # default 20 dB
         self._engine: VMicEngine | None = None
         self._error: str | None = None
         self._dev_signature: tuple = ()   # last-seen input-device name set

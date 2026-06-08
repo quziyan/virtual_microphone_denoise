@@ -12,21 +12,22 @@ method and call it from _build().
 from __future__ import annotations
 
 import threading
+import time
 
 import objc
 from AppKit import (
-    NSButton, NSColor, NSFont, NSProgressIndicator, NSScrollView, NSSound,
-    NSTextField, NSView, NSWindow,
+    NSButton, NSColor, NSFont, NSImage, NSImageView, NSScrollView, NSSlider,
+    NSSound, NSTextField, NSView, NSWindow,
 )
 from Foundation import NSMakeRect, NSObject, NSOperationQueue, NSTimer
 
 import tuning
 
-# NSWindowStyleMask / backing / bezel / progress-style / autoresize constants.
+# NSWindowStyleMask / backing / bezel / image-scale constants.
 _TITLED, _CLOSABLE, _MINIATURIZABLE, _RESIZABLE = 1 << 0, 1 << 1, 1 << 2, 1 << 3
 _BACKING_BUFFERED = 2
 _BEZEL_ROUNDED = 1
-_PROGRESS_BAR = 0  # NSProgressIndicatorStyleBar
+_IMG_SCALE_FILL = 1  # NSImageScaleAxesIndependently (stretch to frame)
 W = 600  # window/content width
 
 
@@ -83,6 +84,7 @@ class SettingsController(NSObject):
         self._active = -1
         self._playing = False
         self._play_timer = None
+        self._last_seek = 0.0   # throttle auto-update right after a user scrub
         return self
 
     # -- lifecycle -----------------------------------------------------------
@@ -101,7 +103,7 @@ class SettingsController(NSObject):
 
     @objc.python_method
     def _build(self):
-        h = 620
+        h = 700
         # Fixed-size dialog: titled + closable + minimize, NOT resizable.
         mask = _TITLED | _CLOSABLE | _MINIATURIZABLE
         win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
@@ -228,10 +230,26 @@ class SettingsController(NSObject):
         self._sound = snd
         self._active = i
         self._playing = True
-        self._progress[i].setDoubleValue_(0.0)
         self._set_play_title(i, True)
         snd.play()
+        # Honour where the user left this row's slider (scrub-before-play).
+        frac = float(self._progress[i].doubleValue())
+        dur = snd.duration()
+        if dur and dur > 0 and frac > 0.001:
+            snd.setCurrentTime_(frac * dur)
         self._start_progress_timer()
+
+    # Seek slider dragged — for the active row seek live; otherwise the thumb
+    # just moves and playback will start there when ▶ is pressed.
+    def onSeek_(self, sender):
+        i = int(sender.tag())
+        if not (0 <= i < len(self._levels)):
+            return
+        self._last_seek = time.time()
+        if self._active == i and self._sound is not None:
+            dur = self._sound.duration()
+            if dur and dur > 0:
+                self._sound.setCurrentTime_(float(sender.doubleValue()) * dur)
 
     # NSSound delegate — fires on the main thread when playback ends.
     def sound_didFinishPlaying_(self, sound, finished):
@@ -278,6 +296,8 @@ class SettingsController(NSObject):
         if snd is None or not (0 <= self._active < len(self._progress)):
             self._stop_progress_timer()
             return
+        if time.time() - self._last_seek < 0.25:   # don't fight a live scrub
+            return
         dur = snd.duration()
         if dur and dur > 0:
             frac = snd.currentTime() / dur
@@ -309,25 +329,39 @@ class SettingsController(NSObject):
         self._play_buttons = []
         self._progress = []
         self._levels = levels
+        full_w = W - 36
         y = self._rows_top
         for i, L in enumerate(levels):
             sign = "+" if L["reduction_db"] > 0 else ""
             text = f"{L['label']}     vs 原始 {sign}{L['reduction_db']} dB"
-            lab = _label(self._doc, text, 18, y + 2, 280, 18, size=13.0)
-            bar = NSProgressIndicator.alloc().initWithFrame_(
-                NSMakeRect(18, y + 26, 360, 12))
-            bar.setStyle_(_PROGRESS_BAR)
-            bar.setIndeterminate_(False)
-            bar.setMinValue_(0.0)
-            bar.setMaxValue_(1.0)
-            bar.setDoubleValue_(0.0)
-            self._doc.addSubview_(bar)
-            play = _button(self._doc, "▶ 播放", 320, y + 8, 90, 28,
+            # Line 1: label + play + use.
+            lab = _label(self._doc, text, 18, y + 4, 280, 18, size=13.0)
+            play = _button(self._doc, "▶ 播放", 320, y + 2, 90, 26,
                            self, b"onPlay:", tag=i)
-            use = _button(self._doc, "用这个阈值", 418, y + 8, 160, 28,
+            use = _button(self._doc, "用这个阈值", 418, y + 2, 160, 26,
                           self, b"onUse:", tag=i)
+            # Line 2: Mel spectrogram image (stretched to fill the row width).
+            iv = NSImageView.alloc().initWithFrame_(NSMakeRect(18, y + 30, full_w, 44))
+            mel = L.get("mel_path")
+            if mel:
+                img = NSImage.alloc().initWithContentsOfFile_(mel)
+                if img is not None:
+                    iv.setImage_(img)
+            iv.setImageScaling_(_IMG_SCALE_FILL)
+            self._doc.addSubview_(iv)
+            # Line 3: seekable slider (doubles as the playback progress bar).
+            sl = NSSlider.alloc().initWithFrame_(NSMakeRect(18, y + 76, full_w, 18))
+            sl.setMinValue_(0.0)
+            sl.setMaxValue_(1.0)
+            sl.setDoubleValue_(0.0)
+            sl.setContinuous_(True)
+            sl.setTarget_(self)
+            sl.setAction_(b"onSeek:")
+            sl.setTag_(i)
+            self._doc.addSubview_(sl)
+
             self._play_buttons.append(play)
-            self._progress.append(bar)
-            self._row_views += [lab, bar, play, use]
-            y += 52
-        self._doc.setFrame_(NSMakeRect(0, 0, W, max(620, y + 20)))
+            self._progress.append(sl)
+            self._row_views += [lab, play, use, iv, sl]
+            y += 100
+        self._doc.setFrame_(NSMakeRect(0, 0, W, max(700, y + 20)))

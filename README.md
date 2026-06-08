@@ -1,5 +1,7 @@
 # VibeCodingVirMic — 虚拟麦克风
 
+![VibeCodingVirMic —— Vibe Coding 党的福音:专删语音指令里的「别人声音」](docs/image.png)
+
 一个 macOS 虚拟麦克风,实时**去除背景人声**(及噪音),把处理后的干净音频暴露成一个音频设备,任意应用(Zoom、腾讯会议、飞书、Teams、Discord、豆包语音输入法、QuickTime 等)都能把它选作麦克风。
 
 > 交付形态是 **VibeCodingVirMic** —— 一个自包含的菜单栏 App + 一键 `.pkg` 安装器。下面的命令行 / Test Lab 工具是开发用的。

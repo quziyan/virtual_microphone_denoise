@@ -11,7 +11,56 @@
                      (去背景人声)              (虚拟声卡)        (选它当麦克风)
 ```
 
-## 环境要求
+## 快速上手 —— 从安装到使用
+
+> 这一节是给**使用者**的完整流程:拿到安装包 → 装好 → 选好降噪 → 在任意 App 里用它当麦克风。后面各节是命令行 / Test Lab / 打包等**开发**用的内容。
+
+整条链路是:**物理麦克风 → VibeCodingVirMic 去背景人声 → BlackHole 2ch(虚拟声卡)→ 你的会议 / 输入法**。你要做的只有两件事:在本 App 里选好降噪,再把目标 App 的麦克风设成 *BlackHole 2ch*,其余交给它。
+
+### 第 1 步 · 安装
+
+需要一台 **Apple Silicon** 的 Mac。拿到 `VibeCodingVirMic-Installer-1.0.0.pkg`,双击打开。因为暂未做 Apple 公证,Gatekeeper 首次会拦 —— **右键 .pkg → 打开** 即可(或在终端跑 `sudo installer -pkg VibeCodingVirMic-Installer-1.0.0.pkg -target /`)。安装过程要输入一次管理员密码(macOS 安装音频驱动时必需)。安装器会一并装好 App、全部依赖,以及 BlackHole 2ch 虚拟声卡。
+
+### 第 2 步 · 打开 App 并启动
+
+从「应用程序」打开 **VibeCodingVirMic**,菜单栏出现 `● VCVMic` 图标(`●` 运行中 / `○` 已停止)。点 **Start** 启动虚拟麦克风。首次会弹出 macOS *麦克风权限* 提示 —— **务必允许**,否则输入是静音的。
+
+### 第 3 步 · 选麦克风、选降噪强度
+
+点菜单栏图标展开菜单:
+
+- 在 **麦克风 / Microphone** 子菜单里选你的物理麦克风(列表已自动排除 BlackHole,以免形成回环);
+- 选一个**降噪强度档位**:**Off(直通)/ Gentle(20 dB)/ Medium(40 dB)/ Strong(60 dB)/ Aggressive(100 dB)**。日常从 **Gentle** 起步,背景人声越大就往上调。
+
+顶部状态行会显示 `麦克风 → 输出 · 档位 · SNR · 欠载次数`,可据此确认链路工作正常。麦克风和档位都会被记住,下次自动沿用。
+
+![菜单栏菜单 —— 启停、选麦克风、选降噪档位](docs/images/menubar-menu.png)
+
+### 第 4 步 ·(可选)用「降噪调教」挑最合适的档位
+
+拿不准选哪一档?点 **设置 / Settings…** 打开设置窗口里的「**降噪调教**」:
+
+1. 点「**录制样本**」(带倒计时),录制时**一边说话一边播放背景人声**,模拟真实场景;
+2. 录完后会列出 **原始 / Gentle / Medium / Strong / Aggressive** 五个版本,各带频谱图、**▶ 播放** 按钮和「vs 原始」的 dB 降幅,逐个试听对比;
+3. 听到满意的那档,点它的「**用这个阈值**」→ 立即应用,菜单栏里对应档位打勾。
+
+![降噪调教设置窗口 —— 逐档试听并选择阈值](docs/images/settings-tuning.png)
+
+### 第 5 步 · 在目标 App 里把麦克风选成 BlackHole 2ch
+
+最后一步:在你要用的 App(Zoom、腾讯会议、飞书、Teams、Discord、豆包语音输入法、QuickTime 等)的麦克风设置里,把麦克风**选成 `BlackHole 2ch`**。
+
+下图以**豆包输入法**为例 —— 在「语音输入 → 麦克风选择」里选 **BlackHole 2ch**(它就是本 App 安装的那个虚拟麦克风):
+
+![豆包输入法的语音输入设置 —— 麦克风选择 BlackHole 2ch](docs/images/doubao-mic-select.png)
+
+选好后,这个 App 听到的就是 VibeCodingVirMic 已去掉背景人声的干净音频。完成 ✅
+
+---
+
+## 环境要求(从源码开发 / 构建)
+
+> 只用安装包的使用者无需关心以下内容,装好 `.pkg` 即可;这里是从源码运行 / 自己打包时的要求。
 
 - **Apple Silicon** 的 macOS(内置的 `libweya_nc.dylib` 仅 arm64)。
 - [Homebrew](https://brew.sh)。
@@ -63,7 +112,7 @@ bash setup.sh
 .venv/bin/python src/vmic.py
 ```
 
-无论哪种方式,在会议/输入法里把麦克风选成 **"BlackHole 2ch"**。
+无论哪种方式,运行后在会议/输入法里把麦克风选成 **"BlackHole 2ch"**(同上面「快速上手」第 5 步)。
 
 > **首次运行**会触发 macOS *麦克风权限* 提示 —— 允许它,否则输入是静音的。
 

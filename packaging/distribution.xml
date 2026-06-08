@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>VibeCodingVirMic 虚拟麦克风</title>
+    <welcome    file="welcome.html"    mime-type="text/html"/>
+    <license    file="LICENSE.txt"     mime-type="text/plain"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+
+    <!-- Apple Silicon only (the Hush dylib + BlackHole are arm64). -->
+    <options customize="never" require-scripts="true" hostArchitectures="arm64"/>
+
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.vibecoding.virmic.pkg"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.vibecoding.virmic.pkg" visible="false">
+        <pkg-ref id="com.vibecoding.virmic.pkg"/>
+    </choice>
+
+    <pkg-ref id="com.vibecoding.virmic.pkg" version="1.0.0" onConclusion="none">VibeCodingVirMic-component.pkg</pkg-ref>
+</installer-gui-script>

@@ -1,0 +1,19 @@
+Hush 虚拟麦克风 — 第三方组件许可 / Bundled Component Licenses
+================================================================
+
+本安装包包含以下开源组件,各自遵循其许可证:
+
+1. Hush speech-enhancement model + Weya NC library
+   © weya-ai / pulp-vision — Apache License 2.0
+   https://huggingface.co/weya-ai/hush  ·  https://github.com/pulp-vision/Hush
+
+2. BlackHole virtual audio driver
+   © Existential Audio Inc. — GNU General Public License v3.0 (GPL-3.0)
+   https://github.com/ExistentialAudio/BlackHole
+   本安装包原样分发未经修改的 BlackHole 驱动。完整源代码可从上述地址获取。
+
+3. Python, NumPy, sounddevice, PortAudio, rumps, PyObjC
+   分别遵循 PSF / BSD / MIT 等许可证。
+
+继续安装即表示你了解并同意以上各组件的许可条款。
+By proceeding you acknowledge the licenses of the bundled components above.

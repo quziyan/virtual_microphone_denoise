@@ -1,0 +1,6 @@
+# Runtime deps for the Hush virtual microphone.
+# The Hush model itself ships as a self-contained C library (vendor/lib) +
+# ONNX bundle (vendor/models) — no PyTorch needed.
+numpy>=1.24
+sounddevice>=0.4.6   # needs PortAudio: `brew install portaudio`
+rumps>=0.4.0         # macOS menu-bar app (src/menubar.py)

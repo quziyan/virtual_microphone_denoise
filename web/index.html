@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hush Test Lab</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>🎙️ Hush Test Lab</h1>
+    <p class="sub">录制对比测试：原始麦克风 vs Hush 处理后。Record, select, and listen to the difference.</p>
+  </header>
+
+  <section class="recorder">
+    <div class="row">
+      <label>时长 Seconds
+        <input id="seconds" type="number" min="1" max="60" value="6">
+      </label>
+      <label>抑制强度 Suppression
+        <select id="atten">
+          <option value="100">Aggressive (100 dB)</option>
+          <option value="40">Balanced (40 dB)</option>
+          <option value="20">Gentle (20 dB)</option>
+        </select>
+      </label>
+      <label>标签 Label
+        <input id="label" type="text" placeholder="e.g. cafe-noise" maxlength="40">
+      </label>
+      <button id="recordBtn">● 录制 Record</button>
+    </div>
+    <p id="recStatus" class="status"></p>
+  </section>
+
+  <main>
+    <aside class="list-pane">
+      <h2>测试 Tests</h2>
+      <ul id="testList"></ul>
+    </aside>
+
+    <section class="detail-pane" id="detail">
+      <p class="empty">← 选择一个测试 Select a test, or record a new one above.</p>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

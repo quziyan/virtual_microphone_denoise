@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+/tmp/
+mic_raw.wav
+mic_denoised.wav
+*_cleaned.wav
+
+recordings/
+web/__pycache__/
+
+build/
+dist/
+*.egg-info/
+
+# local tooling / macOS / regenerable build intermediates
+.claude/
+.DS_Store
+packaging/AppIcon.iconset/
+
+# kept and maintained locally only — not in the remote repo
+CLAUDE.md

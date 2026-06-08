@@ -1,0 +1,27 @@
+#!/bin/bash
+# Runs as root during .pkg install. Installs the BlackHole virtual audio driver
+# (bundled alongside this script) and restarts CoreAudio so it loads immediately.
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+HAL="/Library/Audio/Plug-Ins/HAL"
+DRIVER="$HAL/BlackHole2ch.driver"
+
+mkdir -p "$HAL"
+
+# Install BlackHole only if it isn't already present (don't clobber a user's copy).
+if [ ! -d "$DRIVER" ] && [ -f "$SCRIPT_DIR/BlackHole2ch.driver.tar" ]; then
+    tar -xf "$SCRIPT_DIR/BlackHole2ch.driver.tar" -C "$HAL"
+    chown -R root:wheel "$DRIVER"
+    chmod -R 755 "$DRIVER"
+fi
+
+# Clear quarantine on the freshly installed app so it opens without extra prompts.
+if [ -d "/Applications/VibeCodingVirMic.app" ]; then
+    xattr -dr com.apple.quarantine "/Applications/VibeCodingVirMic.app" 2>/dev/null || true
+fi
+
+# Restart CoreAudio so the new driver shows up as a device right away.
+killall coreaudiod 2>/dev/null || true
+
+exit 0

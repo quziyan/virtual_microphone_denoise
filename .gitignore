@@ -10,8 +10,13 @@ recordings/
 web/__pycache__/
 
 build/
-dist/
 *.egg-info/
+
+# dist/ is tracked for downloads, but only the installer + changelog —
+# not the PyInstaller build intermediates.
+dist/*
+!dist/VibeCodingVirMic-Installer-*.pkg
+!dist/dist.md
 
 # local tooling / macOS / regenerable build intermediates
 .claude/

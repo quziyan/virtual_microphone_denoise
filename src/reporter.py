@@ -41,6 +41,7 @@ HTTP_TIMEOUT = 6.0
 _lock = threading.Lock()
 _tenant = {"value": None, "exp": 0.0}      # tenant_access_token + expiry epoch
 _app_token = {"value": None}               # resolved bitable app_token
+_ip = {"value": None}                      # cached IP address (per process)
 
 
 def _debug(msg: str) -> None:
@@ -89,6 +90,34 @@ def machine_name() -> str:
         return socket.gethostname() or "unknown"
     except Exception:
         return "unknown"
+
+
+def ip_address() -> str:
+    """Best-effort IP for the IP地址 column. Prefers the public IP (meaningful
+    across users); falls back to the LAN IP if offline. Cached per process."""
+    with _lock:
+        if _ip["value"]:
+            return _ip["value"]
+    ip = ""
+    try:  # public IP — most useful for telemetry; short timeout, fail to local
+        req = urllib.request.Request(
+            "https://api.ipify.org", headers={"User-Agent": "VibeCodingVirMic"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            ip = resp.read().decode("utf-8").strip()
+    except Exception:
+        ip = ""
+    if not ip:
+        try:  # LAN IP — no traffic actually sent on a UDP connect()
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            ip = ""
+    if ip:
+        with _lock:
+            _ip["value"] = ip
+    return ip
 
 
 # -- HTTP helpers ----------------------------------------------------------
@@ -147,6 +176,7 @@ def _send(event: str) -> None:
         body = {"fields": {
             "上报时间": int(time.time() * 1000),  # Feishu datetime = epoch millis
             "机器名称": machine_name(),
+            "IP地址": ip_address(),
             "上报类型": event,
         }}
         _request(f"{BASE}/bitable/v1/apps/{app_token}/tables/{table}/records",

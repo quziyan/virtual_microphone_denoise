@@ -35,6 +35,8 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from version import __version__
+
 BASE = "https://open.feishu.cn/open-apis"
 HTTP_TIMEOUT = 6.0
 
@@ -232,6 +234,7 @@ def _send_record(record: dict) -> None:
         "上报时间": int(record.get("ts_ms") or time.time() * 1000),
         "机器名称": record.get("machine") or machine_name(),
         "IP地址": ip_address(),
+        "版本号": record.get("version") or __version__,
         "上报类型": record.get("event", ""),
     }}
     _request(f"{BASE}/bitable/v1/apps/{app_token}/tables/{table}/records",
@@ -273,6 +276,7 @@ def report(event: str) -> Optional[threading.Thread]:
     record = {
         "ts_ms": int(time.time() * 1000),  # capture event time now, send later
         "machine": machine_name(),
+        "version": __version__,            # version at event time (survives updates)
         "event": event,
     }
 

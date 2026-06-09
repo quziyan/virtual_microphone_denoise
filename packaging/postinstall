@@ -19,6 +19,10 @@ fi
 # Clear quarantine on the freshly installed app so it opens without extra prompts.
 if [ -d "/Applications/VibeCodingVirMic.app" ]; then
     xattr -dr com.apple.quarantine "/Applications/VibeCodingVirMic.app" 2>/dev/null || true
+    # (Re)register exactly this bundle with LaunchServices so Launchpad/Spotlight
+    # point at the single /Applications copy and don't surface stale duplicates.
+    LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+    [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "/Applications/VibeCodingVirMic.app" 2>/dev/null || true
 fi
 
 # Restart CoreAudio so the new driver shows up as a device right away.

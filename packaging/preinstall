@@ -1,0 +1,11 @@
+#!/bin/bash
+# Runs as root BEFORE the new payload is laid down. Remove any existing install
+# so the new version fully REPLACES the old one. Without this, pkg payload-merge
+# overwrites matching files but leaves behind orphaned files from an older
+# version (e.g. modules that were renamed/removed) — and stale bundles are what
+# make Launchpad/Spotlight show "several copies".
+set -e
+
+rm -rf "/Applications/VibeCodingVirMic.app" 2>/dev/null || true
+
+exit 0

@@ -18,12 +18,16 @@ SRC_DRV="/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver"
 echo "==> Staging payload..."
 rm -rf "$STAGE"
 mkdir -p "$STAGE/root/Applications" "$STAGE/scripts"
+# Mark build/ so Spotlight skips the staged .app copy (otherwise the staging
+# bundle shows up as a duplicate in Launchpad/Spotlight search).
+touch build/.metadata_never_index
 cp -R "$APP" "$STAGE/root/Applications/"
 
 echo "==> Bundling BlackHole driver..."
 tar -C "$(dirname "$SRC_DRV")" -cf "$STAGE/scripts/BlackHole2ch.driver.tar" "$(basename "$SRC_DRV")"
+cp packaging/preinstall "$STAGE/scripts/preinstall"
 cp packaging/postinstall "$STAGE/scripts/postinstall"
-chmod +x "$STAGE/scripts/postinstall"
+chmod +x "$STAGE/scripts/preinstall" "$STAGE/scripts/postinstall"
 
 echo "==> Generating component plist and DISABLING relocation..."
 # pkgbuild auto-marks .app bundles as relocatable, which makes the installer
@@ -68,6 +72,12 @@ if [ -f packaging/AppIcon.png ]; then
     .venv/bin/python packaging/set_pkg_icon.py packaging/AppIcon.png \
         "dist/VibeCodingVirMic-Installer-$VER.pkg" || echo "  (icon set skipped)"
 fi
+
+# Remove the staged copy AND the loose payload-source .app — the .pkg is the
+# distributable, so no un-installed bundle should linger on disk. This is the
+# definitive fix for "Launchpad/Spotlight shows several copies".
+echo "==> Cleaning staging + loose build app (keeping the .pkg)..."
+rm -rf "$STAGE" "$APP"
 
 echo "==> Done: dist/VibeCodingVirMic-Installer-$VER.pkg"
 ls -lh "dist/VibeCodingVirMic-Installer-$VER.pkg"

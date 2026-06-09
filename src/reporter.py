@@ -48,30 +48,33 @@ def _debug(msg: str) -> None:
         print(f"[telemetry] {msg}", file=sys.stderr)
 
 
-def _config() -> Optional[tuple[str, str, str, str]]:
-    """(app_id, app_secret, wiki_node_token, table_id) or None if unconfigured.
+def _config() -> Optional[tuple[str, str, Optional[str], Optional[str], str]]:
+    """(app_id, app_secret, app_token, wiki_node_token, table_id) or None.
 
-    Env vars override the bundled reporter_config so a build can be re-targeted
-    without rebuilding.
+    Either app_token (preferred — direct, no wiki scope needed) or wiki_node_token
+    (resolved at runtime) must be present. Env vars override the bundled
+    reporter_config so a build can be re-targeted without rebuilding.
     """
     app_id = os.environ.get("VMIC_FEISHU_APP_ID")
     secret = os.environ.get("VMIC_FEISHU_APP_SECRET")
+    app_token = os.environ.get("VMIC_FEISHU_APP_TOKEN")
     wiki = os.environ.get("VMIC_FEISHU_WIKI_TOKEN")
     table = os.environ.get("VMIC_FEISHU_TABLE_ID")
-    if not (app_id and secret and wiki and table):
+    if not (app_id and secret and table and (app_token or wiki)):
         try:
             import reporter_config as rc  # gitignored; present in builds
             app_id = app_id or rc.APP_ID
             secret = secret or rc.APP_SECRET
-            wiki = wiki or rc.WIKI_NODE_TOKEN
+            app_token = app_token or getattr(rc, "APP_TOKEN", None)
+            wiki = wiki or getattr(rc, "WIKI_NODE_TOKEN", None)
             table = table or rc.TABLE_ID
         except Exception:
             return None
-    if not (app_id and secret and wiki and table):
+    if not (app_id and secret and table and (app_token or wiki)):
         return None
     if "x" * 8 in (secret or ""):  # placeholder from the example template
         return None
-    return app_id, secret, wiki, table
+    return app_id, secret, app_token, wiki, table
 
 
 def _enabled() -> bool:
@@ -118,7 +121,9 @@ def _tenant_token(app_id: str, secret: str) -> str:
     return tok
 
 
-def _bitable_app_token(token: str, wiki_node: str) -> str:
+def _bitable_app_token(token: str, app_token: Optional[str], wiki_node: Optional[str]) -> str:
+    if app_token:  # configured directly — no wiki:wiki:readonly scope needed
+        return app_token
     with _lock:
         if _app_token["value"]:
             return _app_token["value"]
@@ -135,10 +140,10 @@ def _send(event: str) -> None:
     cfg = _config()
     if cfg is None:
         return
-    app_id, secret, wiki, table = cfg
+    app_id, secret, app_token_cfg, wiki, table = cfg
     try:
         token = _tenant_token(app_id, secret)
-        app_token = _bitable_app_token(token, wiki)
+        app_token = _bitable_app_token(token, app_token_cfg, wiki)
         body = {"fields": {
             "上报时间": int(time.time() * 1000),  # Feishu datetime = epoch millis
             "机器名称": machine_name(),

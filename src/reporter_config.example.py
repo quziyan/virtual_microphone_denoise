@@ -18,3 +18,9 @@ APP_SECRET = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 # From the Bitable URL .../wiki/<WIKI_NODE_TOKEN>?table=<TABLE_ID>
 WIKI_NODE_TOKEN = "xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 TABLE_ID = "tblxxxxxxxxxxxxxx"
+
+# Optional: the resolved bitable app_token (obj_token of the wiki node). If set,
+# the reporter writes directly and does NOT need the wiki:wiki:readonly scope.
+# Resolve it once via GET /open-apis/wiki/v2/spaces/get_node?token=<WIKI_NODE_TOKEN>
+# (the data.node.obj_token), or leave None to resolve from WIKI_NODE_TOKEN.
+APP_TOKEN = None

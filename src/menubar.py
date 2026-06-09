@@ -366,6 +366,10 @@ class HushMicApp(rumps.App):
         # Telemetry: report app open once, shortly after launch (off critical path).
         if self._secs == 1:
             reporter.report("打开")
+        # Drain any offline backlog periodically, in case the network came back
+        # while the app sat idle (no new event to trigger a flush).
+        elif self._secs % 120 == 0:
+            reporter.flush_async()
 
         # A finished update check left a result for the main thread to handle.
         if self._update_result is not None:

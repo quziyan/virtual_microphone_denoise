@@ -32,16 +32,25 @@ import sys
 import threading
 import time
 import urllib.request
+from pathlib import Path
 from typing import Optional
 
 BASE = "https://open.feishu.cn/open-apis"
 HTTP_TIMEOUT = 6.0
 
+# Offline queue: events persist here immediately, then flush (oldest-first) once
+# the network is back. Survives app quit, so nothing is lost while offline.
+QUEUE_PATH = (Path.home() / "Library" / "Application Support"
+              / "VibeCodingVirMic" / "telemetry_queue.jsonl")
+MAX_QUEUE = 2000  # cap so a permanently-offline machine can't grow it unbounded
+
 # token caches (module-level, guarded by _lock)
 _lock = threading.Lock()
 _tenant = {"value": None, "exp": 0.0}      # tenant_access_token + expiry epoch
 _app_token = {"value": None}               # resolved bitable app_token
-_ip = {"value": None}                      # cached IP address (per process)
+_ip = {"value": None}                      # cached PUBLIC IP (per process)
+_qlock = threading.Lock()                  # guards the queue file
+_flush_lock = threading.Lock()             # ensures only one flush runs at a time
 
 
 def _debug(msg: str) -> None:
@@ -98,26 +107,25 @@ def ip_address() -> str:
     with _lock:
         if _ip["value"]:
             return _ip["value"]
-    ip = ""
-    try:  # public IP — most useful for telemetry; short timeout, fail to local
+    try:  # public IP — most useful for telemetry; short timeout
         req = urllib.request.Request(
             "https://api.ipify.org", headers={"User-Agent": "VibeCodingVirMic"})
         with urllib.request.urlopen(req, timeout=4) as resp:
             ip = resp.read().decode("utf-8").strip()
+        if ip:
+            with _lock:  # only cache a real public IP — so an offline LAN
+                _ip["value"] = ip  # fallback later upgrades to the public one
+            return ip
     except Exception:
-        ip = ""
-    if not ip:
-        try:  # LAN IP — no traffic actually sent on a UDP connect()
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-        except Exception:
-            ip = ""
-    if ip:
-        with _lock:
-            _ip["value"] = ip
-    return ip
+        pass
+    try:  # offline fallback: LAN IP (no traffic actually sent on UDP connect)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        lan = s.getsockname()[0]
+        s.close()
+        return lan  # NOT cached — retry public IP next time
+    except Exception:
+        return ""
 
 
 # -- HTTP helpers ----------------------------------------------------------
@@ -165,41 +173,135 @@ def _bitable_app_token(token: str, app_token: Optional[str], wiki_node: Optional
     return obj
 
 
-def _send(event: str) -> None:
+# -- offline queue ---------------------------------------------------------
+
+def _read_queue() -> list[dict]:
+    try:
+        with _qlock:
+            if not QUEUE_PATH.exists():
+                return []
+            lines = QUEUE_PATH.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    out = []
+    for ln in lines:
+        ln = ln.strip()
+        if ln:
+            try:
+                out.append(json.loads(ln))
+            except Exception:
+                pass
+    return out
+
+
+def _write_queue(records: list[dict]) -> None:
+    try:
+        with _qlock:
+            QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            body = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+            QUEUE_PATH.write_text(body, encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _enqueue(record: dict) -> None:
+    """Append one event to the on-disk queue (so it survives offline + quit)."""
+    try:
+        with _qlock:
+            QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(QUEUE_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        return
+    # Enforce the cap (drop oldest) — cheap given the low event rate.
+    q = _read_queue()
+    if len(q) > MAX_QUEUE:
+        _write_queue(q[-MAX_QUEUE:])
+
+
+def _send_record(record: dict) -> None:
+    """Send one queued record. Raises on any failure (so the queue keeps it)."""
     cfg = _config()
     if cfg is None:
-        return
+        raise RuntimeError("telemetry unconfigured")
     app_id, secret, app_token_cfg, wiki, table = cfg
+    token = _tenant_token(app_id, secret)
+    app_token = _bitable_app_token(token, app_token_cfg, wiki)
+    body = {"fields": {
+        # Use the ORIGINAL event time, not flush time, so the row is accurate.
+        "上报时间": int(record.get("ts_ms") or time.time() * 1000),
+        "机器名称": record.get("machine") or machine_name(),
+        "IP地址": ip_address(),
+        "上报类型": record.get("event", ""),
+    }}
+    _request(f"{BASE}/bitable/v1/apps/{app_token}/tables/{table}/records",
+             body=body, token=token)
+
+
+def _flush() -> None:
+    """Send all queued events oldest-first; stop at the first failure (offline)."""
+    if not _enabled():
+        return
+    if not _flush_lock.acquire(blocking=False):
+        return  # another flush is already draining the queue
     try:
-        token = _tenant_token(app_id, secret)
-        app_token = _bitable_app_token(token, app_token_cfg, wiki)
-        body = {"fields": {
-            "上报时间": int(time.time() * 1000),  # Feishu datetime = epoch millis
-            "机器名称": machine_name(),
-            "IP地址": ip_address(),
-            "上报类型": event,
-        }}
-        _request(f"{BASE}/bitable/v1/apps/{app_token}/tables/{table}/records",
-                 body=body, token=token)
-        _debug(f"reported: {event}")
-    except Exception as exc:  # offline / auth / permission — never propagate
-        _debug(f"failed ({event}): {exc}")
+        queue = _read_queue()
+        if not queue:
+            return
+        sent = 0
+        for record in queue:
+            try:
+                _send_record(record)
+                sent += 1
+            except Exception as exc:  # still offline / error — keep the rest
+                _debug(f"flush stopped after {sent}: {exc}")
+                break
+        if sent:
+            _write_queue(queue[sent:])  # drop the ones that went through
+            _debug(f"flushed {sent}, {len(queue) - sent} remaining")
+    finally:
+        _flush_lock.release()
 
 
 def report(event: str) -> Optional[threading.Thread]:
-    """Append a telemetry row for `event`, off-thread. Returns the thread (so a
-    caller like quit can optionally join it briefly), or None if disabled."""
+    """Record a telemetry event. Persists it to the on-disk queue immediately
+    (so it's never lost — offline or app-quit), then tries to flush in the
+    background. Returns the worker thread (quit can join it briefly) or None if
+    disabled. Never blocks the UI; never raises."""
     if not _enabled():
         return None
-    t = threading.Thread(target=_send, args=(event,), name="vmic-telemetry", daemon=True)
+    record = {
+        "ts_ms": int(time.time() * 1000),  # capture event time now, send later
+        "machine": machine_name(),
+        "event": event,
+    }
+
+    def _run() -> None:
+        _enqueue(record)  # durable first — survives offline and quit
+        _flush()          # then try to drain this + any backlog, oldest-first
+
+    t = threading.Thread(target=_run, name="vmic-telemetry", daemon=True)
+    t.start()
+    return t
+
+
+def flush_async() -> Optional[threading.Thread]:
+    """Try to drain the offline queue in the background (call on launch + on a
+    timer so a backlog sends once the network returns, even with no new event)."""
+    if not _enabled():
+        return None
+    t = threading.Thread(target=_flush, name="vmic-telemetry-flush", daemon=True)
     t.start()
     return t
 
 
 if __name__ == "__main__":
-    # Live smoke test: send one row and report the outcome.
+    # Live smoke test: queue one event and flush.
     os.environ.setdefault("VMIC_TELEMETRY_DEBUG", "1")
     ev = sys.argv[1] if len(sys.argv) > 1 else "测试 / selftest"
-    print("enabled:", _enabled(), "| machine:", machine_name())
-    _send(ev)
+    print("enabled:", _enabled(), "| machine:", machine_name(), "| queue:", QUEUE_PATH)
+    t = report(ev)
+    if t:
+        t.join(timeout=15)
+    print("pending in queue:", len(_read_queue()))
     print("done (check the Bitable for a new row)")

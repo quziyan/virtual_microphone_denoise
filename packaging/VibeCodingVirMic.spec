@@ -10,9 +10,14 @@ on the target Mac. The BlackHole driver is installed separately by the .pkg.
 """
 
 import os
+import sys
 from PyInstaller.utils.hooks import collect_data_files
 
 ROOT = os.path.abspath(os.getcwd())
+
+# Single source of truth for the version (src/version.py).
+sys.path.insert(0, os.path.join(ROOT, "src"))
+from version import __version__ as APP_VERSION  # noqa: E402
 
 datas = [
     (os.path.join(ROOT, "vendor", "lib", "libweya_nc.dylib"), "vendor/lib"),
@@ -27,7 +32,8 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=["engine", "weya_nc", "devicewatch", "tuning", "settingswindow",
-                   "denoise_file", "numpy", "sounddevice", "rumps"],
+                   "denoise_file", "updater", "version",
+                   "numpy", "sounddevice", "rumps"],
     hookspath=[],
     runtime_hooks=[],
     excludes=[
@@ -75,8 +81,8 @@ app = BUNDLE(
     info_plist={
         "CFBundleName": "VibeCodingVirMic",
         "CFBundleDisplayName": "VibeCodingVirMic",
-        "CFBundleShortVersionString": "1.0.0",
-        "CFBundleVersion": "1.0.0",
+        "CFBundleShortVersionString": APP_VERSION,
+        "CFBundleVersion": APP_VERSION,
         "LSUIElement": True,  # menu-bar only, no Dock icon
         "LSMinimumSystemVersion": "12.0",
         "NSMicrophoneUsageDescription":

@@ -237,6 +237,25 @@ bash packaging/build_pkg.sh    # -> dist/VibeCodingVirMic-Installer-1.0.0.pkg
 
 **构建所需:** Apple Silicon、跑过一次开发安装(`bash setup.sh`,使本机有 BlackHole 可打包)、以及 PyInstaller(`pip install pyinstaller`)。
 
+## 自动更新
+
+App 内置了一个轻量的「检查更新」机制(MVP:**提醒 + 跳转下载**,不静默安装):
+
+- 菜单栏有 **检查更新 / Check for Updates…**;App 启动约 5 秒后、之后每 24 小时各自动查一次。
+- 它拉取仓库根目录的 [`appcast.json`](appcast.json)(默认走 GitHub raw),把其中的 `version` 与本机版本(`src/version.py`)比对。
+- 发现新版时,菜单出现「⬆︎ 有新版本 vX」项 + 一条系统通知;点击用浏览器打开 `appcast.json` 里的 `url`(下载页 / `.pkg`),走正常安装流程。
+- 上次检查时间记录在 `~/Library/Application Support/VibeCodingVirMic/config.json`。`VMIC_APPCAST_URL` 环境变量可覆盖更新源(便于自测 / 自建)。
+
+> **为什么不静默升级:** App 尚未做 Apple 公证,凡是 App 自己下载的文件都会被 Gatekeeper 打隔离属性并拦下。要做到"后台下载→自动替换→重启"(Sparkle 式),需先用 Apple Developer ID 签名并公证 .app 与 .pkg。
+
+### 发布一个新版本
+
+1. 改 **`src/version.py`** 里的 `__version__` —— 唯一版本源,`VibeCodingVirMic.spec` 和 `build_pkg.sh` 都从它读,`.pkg` 名、Info.plist、App 内版本自动对齐。
+2. `bash packaging/build_app.sh && bash packaging/build_pkg.sh` 生成新 `.pkg`。
+3. 把 `.pkg` 传到 GitHub Release(或你的下载站)。
+4. 更新根目录 **`appcast.json`**:`version` 改成新版本号、`url` 指向新 `.pkg`(或 releases 页)、填 `notes`,提交并推送。
+5. 已安装的用户下次检查时即收到提醒。
+
 ## 致谢
 
 - 模型:[weya-ai/hush](https://huggingface.co/weya-ai/hush) · 代码:[pulp-vision/Hush](https://github.com/pulp-vision/Hush) —— Apache-2.0。

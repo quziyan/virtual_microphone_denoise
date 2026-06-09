@@ -5,7 +5,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VER="1.0.0"
+# Version comes from the single source of truth: src/version.py.
+VER="$(.venv/bin/python -c 'import sys; sys.path.insert(0, "src"); from version import __version__; print(__version__)')"
+[ -n "$VER" ] || { echo "ERROR: could not read version from src/version.py"; exit 1; }
 APP="dist/VibeCodingVirMic.app"
 STAGE="build/pkg"
 SRC_DRV="/Library/Audio/Plug-Ins/HAL/BlackHole2ch.driver"

@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -45,8 +46,14 @@ except ImportError:
 # menu-bar icon) doesn't pay for numpy/sounddevice. devicewatch is ctypes-only.
 from devicewatch import DeviceChangeWatcher
 
+import subprocess
+
+import updater
+from version import __version__
+
 APP_NAME = "VibeCodingVirMic"     # bundle / config / dialogs
 MENU_NAME = "VCVMic"              # short label shown in the macOS menu bar
+UPDATE_INTERVAL_S = 24 * 60 * 60  # auto-check cadence (also checks ~5 s post-launch)
 MODES = [
     ("Off (passthrough)", "off"),
     ("Gentle (20 dB)", "gentle"),
@@ -80,7 +87,8 @@ class HushMicApp(rumps.App):
     def __init__(self) -> None:
         super().__init__(f"{STOPPED_GLYPH} {MENU_NAME}", quit_button=None)
 
-        cfg = load_config()
+        self._cfg = load_config()
+        cfg = self._cfg
         self._input_name: str | None = cfg.get("input")  # chosen mic name, or None
         self._start_mode = cfg.get("mode", "gentle")  # default 20 dB
         self._engine: VMicEngine | None = None
@@ -90,6 +98,13 @@ class HushMicApp(rumps.App):
         self._dev_dirty = False           # set by CoreAudio watcher on any change
         self._mics_initialized = False    # first device scan deferred off launch
         self._settings = None             # lazily-created native Settings window
+
+        # -- update checking --
+        self._secs = 0                    # seconds since launch (1 s timer)
+        self._update_info: dict | None = None    # latest appcast info if newer
+        self._update_checking = False     # a check is in flight
+        self._update_manual = False       # current check was user-triggered
+        self._update_result: tuple | None = None  # (info, err) stashed off-thread
 
         # Build menu items.
         self._status_item = rumps.MenuItem("Stopped")
@@ -103,6 +118,15 @@ class HushMicApp(rumps.App):
         for label, key in MODES:
             self._mode_items[key] = rumps.MenuItem(label, callback=self._make_mode_cb(key))
 
+        # Update items: a hidden "new version" row (shown only when one is found),
+        # a manual check trigger, and a display-only version line.
+        self._update_item = rumps.MenuItem("", callback=self._on_open_update)
+        self._update_item.hidden = True
+        self._check_item = rumps.MenuItem(
+            "检查更新 / Check for Updates…", callback=self._on_check_updates)
+        self._version_item = rumps.MenuItem(f"{APP_NAME} v{__version__}")
+        self._version_item.set_callback(None)  # display only
+
         self.menu = [
             self._status_item,
             self._toggle_item,
@@ -112,6 +136,9 @@ class HushMicApp(rumps.App):
             *[self._mode_items[key] for _, key in MODES],
             None,
             rumps.MenuItem("设置 / Settings…", callback=self._on_settings),
+            self._update_item,
+            self._check_item,
+            self._version_item,
             None,
             rumps.MenuItem("Quit", callback=self._on_quit),
         ]
@@ -135,7 +162,9 @@ class HushMicApp(rumps.App):
     # -- config --------------------------------------------------------------
 
     def _save(self) -> None:
-        save_config({"input": self._input_name, "mode": self._start_mode})
+        self._cfg["input"] = self._input_name
+        self._cfg["mode"] = self._start_mode
+        save_config(self._cfg)
 
     # -- engine helpers ------------------------------------------------------
 
@@ -216,6 +245,69 @@ class HushMicApp(rumps.App):
                 rumps.alert(f"{APP_NAME} — error", f"{type(exc).__name__}: {exc}")
         self._refresh_mode_checks(key)
 
+    # -- update checking -----------------------------------------------------
+
+    def _on_check_updates(self, _sender) -> None:
+        """Manual 'Check for Updates' — always checks, reports the outcome."""
+        self._start_update_check(manual=True)
+
+    def _start_update_check(self, manual: bool) -> None:
+        if self._update_checking:
+            return
+        self._update_checking = True
+        self._update_manual = manual
+        if manual:
+            self._check_item.title = "检查中… / Checking…"
+        # Worker thread stashes the result; _on_tick consumes it on the main thread.
+        updater.check_async(
+            lambda info, err: setattr(self, "_update_result", (info, err)),
+            current=__version__,
+        )
+
+    def _consume_update_result(self) -> None:
+        """Main-thread handling of a finished check (called from _on_tick)."""
+        info, err = self._update_result
+        self._update_result = None
+        self._update_checking = False
+        manual, self._update_manual = self._update_manual, False
+        self._check_item.title = "检查更新 / Check for Updates…"
+
+        # Record last successful check time (err is None on a completed check).
+        if err is None:
+            self._cfg["last_update_check"] = time.time()
+            save_config(self._cfg)
+
+        if info:  # a newer version is available
+            self._update_info = info
+            ver = str(info.get("version", "?"))
+            self._update_item.title = f"⬆︎ 有新版本 v{ver} —— 点此下载"
+            self._update_item.hidden = False
+            notes = str(info.get("notes", "")).strip()
+            try:
+                rumps.notification(
+                    APP_NAME, f"有新版本 v{ver}",
+                    notes or "点菜单里的「有新版本」下载更新。")
+            except Exception:
+                pass
+            if manual:
+                rumps.alert(APP_NAME, f"发现新版本 v{ver}。\n\n{notes}")
+        elif manual and err is None:
+            rumps.alert(APP_NAME, f"已是最新版本(v{__version__})。")
+        elif manual and err:
+            rumps.alert(f"{APP_NAME} — 检查更新失败", err)
+
+    def _on_open_update(self, _sender) -> None:
+        """Open the download URL for the available update in the browser."""
+        if not self._update_info:
+            return
+        url = str(self._update_info.get("url", "")).strip()
+        if not url:
+            return
+        try:
+            subprocess.run(["open", url], check=False)
+        except Exception as exc:
+            rumps.alert(f"{APP_NAME} — error", f"{type(exc).__name__}: {exc}")
+
     # -- settings / tuning ---------------------------------------------------
 
     def _on_settings(self, _sender) -> None:
@@ -257,6 +349,17 @@ class HushMicApp(rumps.App):
         rumps.quit_application()
 
     def _on_tick(self, _timer) -> None:
+        self._secs += 1
+
+        # A finished update check left a result for the main thread to handle.
+        if self._update_result is not None:
+            self._consume_update_result()
+
+        # Auto-check ~5 s after launch (off the critical path), then on cadence.
+        if self._secs == 5 or (self._secs % UPDATE_INTERVAL_S == 0):
+            if not self._update_checking and self._update_info is None:
+                self._start_update_check(manual=False)
+
         if not self._mics_initialized:
             # First scan: enumerate mics now (deferred from launch).
             self._mics_initialized = True

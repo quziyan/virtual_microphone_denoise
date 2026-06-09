@@ -28,4 +28,17 @@ fi
 # Restart CoreAudio so the new driver shows up as a device right away.
 killall coreaudiod 2>/dev/null || true
 
+# If preinstall killed a running instance, relaunch the NEW build in the logged-in
+# user's GUI session (root must hop into the user's session via launchctl asuser).
+FLAG="/tmp/.vmic_was_running"
+if [ -f "$FLAG" ] && [ -d "/Applications/VibeCodingVirMic.app" ]; then
+    CONSOLE_USER="$(stat -f%Su /dev/console 2>/dev/null)"
+    if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+        CONSOLE_UID="$(id -u "$CONSOLE_USER")"
+        launchctl asuser "$CONSOLE_UID" \
+            open -a "/Applications/VibeCodingVirMic.app" 2>/dev/null || true
+    fi
+fi
+rm -f "$FLAG"
+
 exit 0

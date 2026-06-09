@@ -1,10 +1,25 @@
 #!/bin/bash
-# Runs as root BEFORE the new payload is laid down. Remove any existing install
-# so the new version fully REPLACES the old one. Without this, pkg payload-merge
-# overwrites matching files but leaves behind orphaned files from an older
-# version (e.g. modules that were renamed/removed) — and stale bundles are what
-# make Launchpad/Spotlight show "several copies".
+# Runs as root BEFORE the new payload is laid down.
+#
+# 1) Quit any RUNNING instance of the app. The .pkg replaces the bundle on disk,
+#    but a live menu-bar process keeps running the OLD code from memory — so the
+#    user sees the old version still running after install unless we kill it.
+# 2) Remove the existing install so the new version fully REPLACES it (no orphan
+#    files from an older version; stale bundles also cause Launchpad duplicates).
 set -e
+
+MATCH="VibeCodingVirMic.app/Contents/MacOS/VibeCodingVirMic"
+FLAG="/tmp/.vmic_was_running"   # tells postinstall to relaunch the new version
+
+rm -f "$FLAG"
+if pgrep -f "$MATCH" >/dev/null 2>&1; then
+    touch "$FLAG"               # it was running -> relaunch new build afterwards
+fi
+
+# Kill the running instance (graceful TERM, then KILL if it lingers).
+pkill -f "$MATCH" 2>/dev/null || true
+sleep 1
+pkill -9 -f "$MATCH" 2>/dev/null || true
 
 rm -rf "/Applications/VibeCodingVirMic.app" 2>/dev/null || true
 

@@ -23,6 +23,9 @@ dist/*
 .DS_Store
 packaging/AppIcon.iconset/
 
+# telemetry credentials — bundled into the built .app, NEVER committed
+src/reporter_config.py
+
 # kept and maintained locally only — not in the remote repo
 CLAUDE.md
 docs/wechat-article.md

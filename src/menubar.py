@@ -48,6 +48,7 @@ from devicewatch import DeviceChangeWatcher
 
 import subprocess
 
+import reporter
 import updater
 from version import __version__
 
@@ -206,8 +207,10 @@ class HushMicApp(rumps.App):
         try:
             if self._running:
                 self._engine.stop()
+                reporter.report("停止")
             else:
                 self._ensure_engine().start()
+                reporter.report("开始")
             self._error = None
         except LookupError as exc:
             self._error = str(exc)
@@ -221,6 +224,7 @@ class HushMicApp(rumps.App):
         def cb(_sender) -> None:
             self._input_name = name
             self._save()
+            reporter.report("切换麦克风")
             if self._engine is not None:
                 try:
                     self._engine.set_input(name)
@@ -238,6 +242,7 @@ class HushMicApp(rumps.App):
         """Apply a suppression preset (from a menu click or the tuning page)."""
         self._start_mode = key
         self._save()
+        reporter.report(f"切换降噪档:{key}")
         if self._engine is not None:
             try:
                 self._engine.set_mode(key)
@@ -249,6 +254,7 @@ class HushMicApp(rumps.App):
 
     def _on_check_updates(self, _sender) -> None:
         """Manual 'Check for Updates' — always checks, reports the outcome."""
+        reporter.report("检查更新")
         self._start_update_check(manual=True)
 
     def _start_update_check(self, manual: bool) -> None:
@@ -311,6 +317,7 @@ class HushMicApp(rumps.App):
     # -- settings / tuning ---------------------------------------------------
 
     def _on_settings(self, _sender) -> None:
+        reporter.report("打开设置")
         try:
             if self._settings is None:
                 from settingswindow import SettingsController  # lazy: pulls numpy/AppKit
@@ -340,16 +347,25 @@ class HushMicApp(rumps.App):
         return None
 
     def _on_quit(self, _sender) -> None:
+        # Best-effort: fire the 'quit' report and give it a moment to flush before
+        # the process exits (daemon threads die on exit).
+        t = reporter.report("退出")
         try:
             self._watcher.stop()
         except Exception:
             pass
         if self._engine is not None:
             self._engine.stop()
+        if t is not None:
+            t.join(timeout=1.5)
         rumps.quit_application()
 
     def _on_tick(self, _timer) -> None:
         self._secs += 1
+
+        # Telemetry: report app open once, shortly after launch (off critical path).
+        if self._secs == 1:
+            reporter.report("打开")
 
         # A finished update check left a result for the main thread to handle.
         if self._update_result is not None:

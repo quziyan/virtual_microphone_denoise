@@ -21,6 +21,7 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSOperationQueue, NSTimer
 
+import loginitem
 import tuning
 
 # NSWindowStyleMask / backing / bezel / image-scale constants.
@@ -85,6 +86,7 @@ class SettingsController(NSObject):
         self._playing = False
         self._play_timer = None
         self._last_seek = 0.0   # throttle auto-update right after a user scrub
+        self._launch_switch = None  # "launch at login" checkbox
         return self
 
     # -- lifecycle -----------------------------------------------------------
@@ -126,10 +128,32 @@ class SettingsController(NSObject):
         self._doc = doc
 
         y = 18
+        y = self._build_startup_section(y)
         y = self._build_tuning_section(y)
         doc.setFrame_(NSMakeRect(0, 0, W, max(h, y + 20)))
 
     # -- sections (add more here later) --------------------------------------
+
+    @objc.python_method
+    def _build_startup_section(self, y):
+        doc = self._doc
+        _label(doc, "通用 / General", 18, y, W - 36, 24, bold=True, size=16.0)
+        y += 30
+        sw = NSButton.alloc().initWithFrame_(NSMakeRect(18, y, W - 36, 22))
+        sw.setButtonType_(3)  # NSButtonTypeSwitch (checkbox)
+        sw.setTitle_("开机自动启动 / Launch at login")
+        sw.setTarget_(self)
+        sw.setAction_(b"onToggleLaunchAtLogin:")
+        try:
+            sw.setState_(1 if loginitem.is_enabled() else 0)
+        except Exception:
+            sw.setState_(0)
+        doc.addSubview_(sw)
+        self._launch_switch = sw
+        y += 28
+        _label(doc, "登录 macOS 时自动在后台启动 VibeCodingVirMic。",
+               18, y, W - 36, 18, size=12.0, secondary=True)
+        return y + 34
 
     @objc.python_method
     def _build_tuning_section(self, y):
@@ -153,6 +177,20 @@ class SettingsController(NSObject):
         return y + 220  # reserve space; grows when rows are populated
 
     # -- actions -------------------------------------------------------------
+
+    def onToggleLaunchAtLogin_(self, sender):
+        enabled = bool(sender.state())
+        loginitem.set_enabled(enabled)
+        # Reflect the real on-disk state in case registration failed.
+        try:
+            sender.setState_(1 if loginitem.is_enabled() else 0)
+        except Exception:
+            pass
+        try:
+            import reporter
+            reporter.report("开机自动启动:开" if enabled else "开机自动启动:关")
+        except Exception:
+            pass
 
     def onRecord_(self, sender):
         try:

@@ -1,8 +1,8 @@
 {
-  "version": "1.0.3",
-  "url": "https://github.com/quziyan/virtual_microphone_denoise/raw/master/dist/VibeCodingVirMic-Installer-1.0.3.pkg",
-  "notes": "安装新版本时自动关闭正在运行的旧版本并重新启动新版,避免新旧并存。",
+  "version": "1.0.5",
+  "url": "https://github.com/quziyan/virtual_microphone_denoise/raw/master/dist/VibeCodingVirMic-Installer-1.0.5.pkg",
+  "notes": "修复:开启「开机自动启动」时不再立即多开一个实例(状态栏两个图标);新增单实例保护。开机自启、停止退直通、崩溃自动恢复照常。",
   "min_os": "12.0",
   "mandatory": false,
-  "pub_date": "2026-06-09"
+  "pub_date": "2026-06-17"
 }

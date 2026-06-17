@@ -32,8 +32,8 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=["engine", "weya_nc", "devicewatch", "tuning", "settingswindow",
-                   "denoise_file", "updater", "version", "reporter", "reporter_config",
-                   "numpy", "sounddevice", "rumps"],
+                   "loginitem", "denoise_file", "updater", "version", "reporter",
+                   "reporter_config", "numpy", "sounddevice", "rumps"],
     hookspath=[],
     runtime_hooks=[],
     excludes=[

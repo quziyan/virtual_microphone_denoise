@@ -26,6 +26,7 @@ VMIC_INPUT / VMIC_OUTPUT env vars still override device matching if set.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import sys
@@ -84,6 +85,30 @@ def save_config(cfg: dict) -> None:
         pass
 
 
+_INSTANCE_LOCK_FH = None  # module-global so the flock is held for the whole process
+
+
+def acquire_single_instance() -> bool:
+    """Return True if we are the only instance (lock acquired). Return False if
+    another instance already holds the lock — the caller should then exit with
+    code 0 so a KeepAlive LaunchAgent treats it as a clean exit and won't relaunch.
+
+    Prevents the "two menu-bar icons" case where the app gets launched both by
+    launchd (login agent) and manually via Finder/LaunchServices.
+    """
+    global _INSTANCE_LOCK_FH
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        fh = open(CONFIG_DIR / "instance.lock", "w")
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _INSTANCE_LOCK_FH = fh  # keep a reference; lock releases on process exit
+        return True
+    except OSError:
+        return False  # another live instance holds the lock
+    except Exception:
+        return True   # never block launch on lock-infra failure
+
+
 class HushMicApp(rumps.App):
     def __init__(self) -> None:
         super().__init__(f"{STOPPED_GLYPH} {MENU_NAME}", quit_button=None)
@@ -92,6 +117,10 @@ class HushMicApp(rumps.App):
         cfg = self._cfg
         self._input_name: str | None = cfg.get("input")  # chosen mic name, or None
         self._start_mode = cfg.get("mode", "gentle")  # default 20 dB
+        # Whether the engine (the BlackHole bridge) should be running. Persisted so
+        # an at-login / post-crash relaunch resumes feeding BlackHole on its own.
+        self._want_running = cfg.get("engine_running", False)
+        self._autostart_done = False
         self._engine: VMicEngine | None = None
         self._error: str | None = None
         self._dev_signature: tuple = ()   # last-seen input-device name set
@@ -165,6 +194,7 @@ class HushMicApp(rumps.App):
     def _save(self) -> None:
         self._cfg["input"] = self._input_name
         self._cfg["mode"] = self._start_mode
+        self._cfg["engine_running"] = self._want_running
         save_config(self._cfg)
 
     # -- engine helpers ------------------------------------------------------
@@ -201,15 +231,44 @@ class HushMicApp(rumps.App):
     def _running(self) -> bool:
         return self._engine is not None and self._engine.running
 
+    @property
+    def _denoise_active(self) -> bool:
+        """Bridge up AND actually denoising (mode != passthrough)."""
+        return self._running and self._engine is not None and self._engine.mode != "off"
+
+    def _maybe_autostart_engine(self) -> None:
+        """On launch (incl. at-login / post-crash relaunch), resume the bridge if
+        it was running before, so dependent apps regain BlackHole audio with no click."""
+        if self._autostart_done or not self._want_running or self._running:
+            return
+        self._autostart_done = True
+        try:
+            self._ensure_engine().start()
+            self._error = None
+            reporter.report("自动恢复")
+        except Exception as exc:
+            self._error = f"{type(exc).__name__}: {exc}"
+
     # -- callbacks -----------------------------------------------------------
 
     def _on_toggle(self, _sender) -> None:
         try:
-            if self._running:
-                self._engine.stop()
-                reporter.report("停止")
+            if self._denoise_active:
+                # Don't tear down the BlackHole bridge — fall back to raw passthrough
+                # so dependent apps keep receiving mic audio; denoising just turns off.
+                self._engine.set_mode("off")
+                self._refresh_mode_checks("off")
+                reporter.report("停止降噪(直通)")
             else:
-                self._ensure_engine().start()
+                eng = self._ensure_engine()
+                if not eng.running:
+                    eng.start()
+                target = self._start_mode if self._start_mode != "off" else "gentle"
+                eng.set_mode(target)
+                self._start_mode = target
+                self._want_running = True
+                self._save()
+                self._refresh_mode_checks(target)
                 reporter.report("开始")
             self._error = None
         except LookupError as exc:
@@ -384,6 +443,7 @@ class HushMicApp(rumps.App):
             # First scan: enumerate mics now (deferred from launch).
             self._mics_initialized = True
             self._rebuild_mic_menu()
+            self._maybe_autostart_engine()
             self._update_ui()
             return
         if self._dev_dirty:
@@ -504,7 +564,8 @@ class HushMicApp(rumps.App):
     def _update_ui(self) -> None:
         running = self._running
         self.title = f"{RUNNING_GLYPH if running else STOPPED_GLYPH} {MENU_NAME}"
-        self._toggle_item.title = "Stop" if running else "Start"
+        # "Stop" turns denoising off (drops to passthrough); the bridge stays up.
+        self._toggle_item.title = "Stop" if self._denoise_active else "Start"
         if self._error and not running:
             self._status_item.title = f"Error: {self._error[:48]}"
         elif running:
@@ -565,5 +626,7 @@ if __name__ == "__main__":
         sys.exit(_selftest())
     if "--selftest-ui" in sys.argv:
         sys.exit(_selftest_ui())
+    if not acquire_single_instance():
+        sys.exit(0)  # another instance already running — don't stack a 2nd icon
     HushMicApp().run()
 

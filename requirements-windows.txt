@@ -1,0 +1,4 @@
+# Windows build/runtime deps for VibeCodingVirMic-Windows.
+numpy>=1.24
+sounddevice>=0.4.6
+pyinstaller>=6.0

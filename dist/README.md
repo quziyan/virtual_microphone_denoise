@@ -1,10 +1,23 @@
 # VibeCodingVirMic 发布记录 / Releases
 
-供下载的安装包都在本 `dist/` 目录。安装方法见仓库根目录 `README.md` 的「在另一台 Mac 上安装」。
+供下载的安装包都在本 `dist/` 目录。安装方法见仓库根目录 `README.md` 的「在另一台 Mac 上安装」和「Windows 版」。
 
 > 适用环境:**Apple Silicon Mac**。安装包未做 Apple 公证,首次打开请**右键 .pkg → 打开**,或 `sudo installer -pkg <包名> -target /`。安装需要一次管理员密码(用于安装 BlackHole 音频驱动)。
 
+> Windows 版是单文件 `.exe`。Windows 无法直接使用 macOS 的 BlackHole/CoreAudio 链路,需要用户先安装 VB-CABLE 或 VoiceMeeter 这类虚拟音频线缆。当前仓库没有 `weya_nc.dll`,所以 Windows 包默认是 passthrough 路由;放入 Windows 原生 `vendor/lib/weya_nc.dll` 后才会启用 Hush 降噪。
+
 ---
+
+## v1.0.5 Windows — 2026-06-24
+
+**安装包:** `VibeCodingVirMic-Windows-1.0.5.exe`
+
+- **新增:** Windows 单文件 exe,用于把物理麦克风实时路由到 VB-CABLE/VoiceMeeter 的播放端。
+- **默认输出设备:** 自动寻找 `CABLE Input` / `VoiceMeeter Input` 等虚拟线缆输出端。
+- **目标 App 设置:** 在会议/语音输入 App 中选择匹配的录音端,通常是 `CABLE Output`。
+- **限制:** 当前不包含 Windows 原生 Hush 推理 DLL,因此默认 passthrough;若后续加入 `vendor/lib/weya_nc.dll`,exe 会自动尝试启用降噪。
+- **自检:** `VibeCodingVirMic-Windows-1.0.5.exe --selftest`
+- **设备列表:** `VibeCodingVirMic-Windows-1.0.5.exe --list-devices`
 
 ## v1.0.3 — 2026-06-09
 

@@ -68,6 +68,26 @@
 - [Homebrew](https://brew.sh)。
 - Python 3.9+(系统自带的 `python3` 即可)。
 
+### Windows 版
+
+Windows 包在 [`./dist/`](./dist/) 目录中,文件名形如 `VibeCodingVirMic-Windows-1.0.5.exe`。它不是 macOS 版的完整等价替代:
+
+- Windows 不能使用 BlackHole/CoreAudio,需要先安装 [VB-CABLE](https://vb-audio.com/Cable/) 或 VoiceMeeter 之类的虚拟音频线缆。
+- 当前仓库只有 macOS 的 `vendor/lib/libweya_nc.dylib`,没有 Windows 原生 `vendor/lib/weya_nc.dll`,所以 Windows exe 默认做 passthrough 路由;放入 `weya_nc.dll` 后会自动尝试启用 Hush 降噪。
+- 使用时先运行:
+  ```powershell
+  .\dist\VibeCodingVirMic-Windows-1.0.5.exe --list-devices
+  .\dist\VibeCodingVirMic-Windows-1.0.5.exe
+  ```
+- exe 会把物理麦克风写到 `CABLE Input` / `VoiceMeeter Input` 等播放端;在目标会议/语音输入 App 中,把麦克风选成匹配的录音端,通常是 `CABLE Output`。
+- 没装虚拟线缆时,exe 会提示安装;开发测试可临时加 `--allow-non-virtual-output`,但这只会把声音打到扬声器,不等价于虚拟麦克风。
+
+Windows 打包命令:
+
+```powershell
+.\packaging\build_windows.ps1
+```
+
 ## 安装(开发环境)
 
 ```bash

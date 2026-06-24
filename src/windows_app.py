@@ -53,6 +53,39 @@ MODEL_PATH = VENDOR / "models" / "advanced_dfnet16k_model_best_onnx.tar.gz"
 WINDOWS_DLL = VENDOR / "lib" / "weya_nc.dll"
 
 
+def launched_without_args() -> bool:
+    return len(sys.argv) <= 1
+
+
+def show_windows_message(title: str, message: str, *, error: bool = False) -> None:
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        flags = 0x00000010 if error else 0x00000040  # MB_ICONERROR / MB_ICONINFORMATION
+        ctypes.windll.user32.MessageBoxW(None, message, title, flags)
+    except Exception:
+        pass
+
+
+def wait_before_exit() -> None:
+    try:
+        input("\nPress Enter to close...")
+    except Exception:
+        time.sleep(8)
+
+
+def fail(message: str, code: int, *, details: str = "", no_dialog: bool = False, pause: bool = False) -> int:
+    full = message if not details else f"{message}\n\n{details}"
+    print(full, file=sys.stderr)
+    if (launched_without_args() or pause) and not no_dialog:
+        show_windows_message(APP_NAME, full, error=True)
+    if launched_without_args() or pause:
+        wait_before_exit()
+    return code
+
+
 def _matches_any(name: str, hints: tuple[str, ...]) -> bool:
     lower = name.lower()
     return any(hint in lower for hint in hints)
@@ -263,13 +296,20 @@ def main() -> int:
     parser.add_argument("--atten-lim-db", type=float, default=20.0)
     parser.add_argument("--passthrough", action="store_true", help="Force passthrough; no denoise session.")
     parser.add_argument("--allow-non-virtual-output", action="store_true", help="Allow default speaker output if no virtual cable is found.")
+    parser.add_argument("--pause-on-exit", action="store_true", help="Wait for Enter before exiting.")
+    parser.add_argument("--no-dialog", action="store_true", help="Do not show Windows message boxes on startup errors.")
     args = parser.parse_args()
 
     try:
         import sounddevice as sd
     except Exception as exc:
-        print(f"sounddevice/PortAudio failed to load: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 2
+        return fail(
+            "sounddevice/PortAudio failed to load.",
+            2,
+            details=f"{type(exc).__name__}: {exc}",
+            no_dialog=args.no_dialog,
+            pause=args.pause_on_exit,
+        )
 
     if args.list_devices:
         list_devices(sd)
@@ -283,6 +323,8 @@ def main() -> int:
         print(f"  Windows Weya DLL: {'present' if WINDOWS_DLL.exists() else 'missing'} ({WINDOWS_DLL})")
         print(f"  Model bundle: {'present' if MODEL_PATH.exists() else 'missing'} ({MODEL_PATH})")
         print("  Note: denoise on Windows requires vendor/lib/weya_nc.dll.")
+        if args.pause_on_exit:
+            wait_before_exit()
         return 0
 
     try:
@@ -301,9 +343,14 @@ def main() -> int:
                 "or pass --output-device, or use --allow-non-virtual-output for testing."
             )
     except LookupError as exc:
-        print(str(exc), file=sys.stderr)
-        print("\nRun with --list-devices to inspect available devices.", file=sys.stderr)
-        return 3
+        detail = (
+            "This is why double-clicking looked like a flash-and-exit.\n\n"
+            "Install VB-CABLE or VoiceMeeter first. After installation, this app should find "
+            "'CABLE Input' or 'VoiceMeeter Input' as its output. In the target meeting/voice app, "
+            "select the matching recording device such as 'CABLE Output'.\n\n"
+            "Run with --list-devices from PowerShell to inspect available devices."
+        )
+        return fail(str(exc), 3, details=detail, no_dialog=args.no_dialog, pause=args.pause_on_exit)
 
     router = AudioRouter(
         sd=sd,
@@ -319,8 +366,13 @@ def main() -> int:
     try:
         router.start()
     except Exception as exc:
-        print(f"Failed to start audio route: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 4
+        return fail(
+            "Failed to start audio route.",
+            4,
+            details=f"{type(exc).__name__}: {exc}",
+            no_dialog=args.no_dialog,
+            pause=args.pause_on_exit,
+        )
 
     denoise_state = "passthrough"
     if router.nc is not None:

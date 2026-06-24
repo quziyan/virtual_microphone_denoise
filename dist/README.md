@@ -16,6 +16,7 @@
 - **默认输出设备:** 自动寻找 `CABLE Input` / `VoiceMeeter Input` 等虚拟线缆输出端。
 - **目标 App 设置:** 在会议/语音输入 App 中选择匹配的录音端,通常是 `CABLE Output`。
 - **限制:** 当前不包含 Windows 原生 Hush 推理 DLL,因此默认 passthrough;若后续加入 `vendor/lib/weya_nc.dll`,exe 会自动尝试启用降噪。
+- **双击行为:** 未安装虚拟线缆时会弹窗并等待关闭,不会再一闪而过。
 - **自检:** `VibeCodingVirMic-Windows-1.0.5.exe --selftest`
 - **设备列表:** `VibeCodingVirMic-Windows-1.0.5.exe --list-devices`
 
